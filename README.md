@@ -42,18 +42,53 @@ ProductAnalysisSystem (Supervisor Agent)
 amazon-product-analyzer/
 ├── backend/                    # FastAPI 後端服務
 │   ├── app/
-│   │   ├── agents/            # LangGraph Agents
 │   │   ├── api/               # FastAPI Routes
-│   │   ├── core/              # 核心服務 (config, database, redis)
-│   │   ├── models/            # SQLAlchemy Models
-│   │   ├── services/          # Business Logic
+│   │   │   └── v1/           # API v1 endpoints
+│   │   │       ├── api.py    # Main API router
+│   │   │       ├── auth.py   # Authentication endpoints
+│   │   │       └── chatbot.py # LangGraph chatbot endpoints
+│   │   ├── core/              # 核心服務配置
+│   │   │   ├── config.py     # Application configuration
+│   │   │   ├── logging.py    # Structured logging setup
+│   │   │   ├── metrics.py    # Prometheus metrics
+│   │   │   ├── middleware.py # FastAPI middleware
+│   │   │   ├── limiter.py    # Rate limiting
+│   │   │   ├── langgraph/    # LangGraph agent implementation
+│   │   │   │   ├── graph.py  # Main LangGraph agent
+│   │   │   │   └── tools/    # LangGraph tools
+│   │   │   └── prompts/      # System prompts
+│   │   ├── models/            # SQLModel/SQLAlchemy Models
+│   │   │   ├── base.py       # Base model classes
+│   │   │   ├── database.py   # Database configuration
+│   │   │   ├── user.py       # User model
+│   │   │   ├── session.py    # Session model
+│   │   │   └── thread.py     # Thread model
+│   │   ├── schemas/           # Pydantic schemas
+│   │   │   ├── auth.py       # Authentication schemas
+│   │   │   ├── chat.py       # Chat request/response schemas
+│   │   │   └── graph.py      # LangGraph state schemas
+│   │   ├── services/          # Business logic services
+│   │   │   └── database.py   # Database service layer
 │   │   ├── utils/             # 工具函數
+│   │   │   ├── auth.py       # JWT token utilities
+│   │   │   ├── graph.py      # LangGraph utilities
+│   │   │   └── sanitization.py # Input sanitization
 │   │   └── main.py           # FastAPI App Entry
-│   ├── alembic/              # Database Migrations
-│   ├── tests/                # Pytest Tests
+│   ├── evals/                # LLM evaluation framework
+│   │   ├── evaluator.py      # Main evaluation engine
+│   │   ├── metrics/          # Evaluation metrics
+│   │   └── schemas.py        # Evaluation schemas
+│   ├── grafana/              # Grafana dashboards
+│   ├── prometheus/           # Prometheus configuration
+│   ├── scripts/              # Deployment and utility scripts
+│   ├── logs/                 # Application logs
+│   ├── schema.sql            # Database schema
+│   ├── Dockerfile            # Container configuration
+│   ├── docker-compose.yml    # Multi-container setup
+│   ├── Makefile              # Development commands
 │   ├── pyproject.toml        # uv 專案配置
 │   └── uv.lock              # uv 依賴鎖定檔案
-├── frontend/                 # Next.js 前端應用 (待開發)
+├── frontend/                 # Streamlit 測試前端 (已實現)
 ├── PLANNING.md              # 專案架構規劃
 ├── SPEC.md                  # 專案規格說明
 ├── TASK.md                  # 任務追蹤

@@ -1,66 +1,246 @@
+"""Application configuration management.
+
+This module handles environment-specific configuration loading, parsing, and management
+for the application. It includes environment detection, .env file loading, and
+configuration value parsing.
 """
-Core configuration settings for the Amazon Product Analyzer application.
 
-This module handles all environment variables and application settings using
-Pydantic Settings for type safety and validation.
-"""
+import json
+import os
+from enum import Enum
+from pathlib import Path
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Union,
+)
 
-from typing import Optional
-from pydantic import Field
-from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
 
 
-class Settings(BaseSettings):
+# Define environment types
+class Environment(str, Enum):
+    """Application environment types.
+
+    Defines the possible environments the application can run in:
+    development, staging, production, and test.
     """
-    Application settings loaded from environment variables.
-    
-    All settings are validated using Pydantic and can be overridden
-    via environment variables or .env file.
+
+    DEVELOPMENT = "development"
+    STAGING = "staging"
+    PRODUCTION = "production"
+    TEST = "test"
+
+
+# Determine environment
+def get_environment() -> Environment:
+    """Get the current environment.
+
+    Returns:
+        Environment: The current environment (development, staging, production, or test)
     """
+    env = os.getenv("APP_ENV", "development").lower()
     
-    # Application Settings
-    app_name: str = Field(default="Amazon Product Analyzer", description="Application name")
-    debug: bool = Field(default=True, description="Enable debug mode")
-    environment: str = Field(default="development", description="Environment (development/production)")
-    secret_key: str = Field(default="dev-secret-key-change-in-production-12345678901234567890", description="Secret key for JWT and other cryptographic operations")
-    
-    # Database Configuration (使用 SQLite 進行 POC)
-    database_url: str = Field(default="sqlite+aiosqlite:///./amazon_analyzer.db", description="Database URL")
-    database_echo: bool = Field(default=False, description="Enable SQLAlchemy query logging")
-    
-    # Redis Configuration
-    redis_url: str = Field(default="redis://localhost:6379", description="Redis connection URL")
-    redis_max_connections: int = Field(default=10, description="Maximum Redis connections")
-    
-    # AI Service Configuration
-    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
-    anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
-    
-    # Scraping Configuration
-    user_agent: str = Field(
-        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        description="User agent for web scraping"
-    )
-    proxy_url: Optional[str] = Field(default=None, description="Proxy URL for scraping")
-    scraping_delay: float = Field(default=1.0, description="Delay between scraping requests (seconds)")
-    max_concurrent_requests: int = Field(default=5, description="Maximum concurrent scraping requests")
-    
-    # API Configuration
-    api_v1_prefix: str = Field(default="/api/v1", description="API version 1 prefix")
-    cors_origins: list[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8000"],
-        description="Allowed CORS origins"
-    )
-    
-    # Rate Limiting
-    rate_limit_requests: int = Field(default=100, description="Requests per minute limit")
-    rate_limit_window: int = Field(default=60, description="Rate limit window in seconds")
-    
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    if env in ("production", "prod"):
+        return Environment.PRODUCTION
+    elif env in ("staging", "stage"):
+        return Environment.STAGING
+    elif env == "test":
+        return Environment.TEST
+    else:
+        return Environment.DEVELOPMENT
 
 
-# Global settings instance
-settings = Settings() 
+# Load appropriate .env file based on environment
+def load_env_file():
+    """Load environment-specific .env file."""
+    env = get_environment()
+    print(f"Loading environment: {env}")
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+
+    # Define env files in priority order
+    env_files = [
+        os.path.join(base_dir, f".env.{env.value}.local"),
+        os.path.join(base_dir, f".env.{env.value}"),
+        os.path.join(base_dir, ".env.local"),
+        os.path.join(base_dir, ".env"),
+    ]
+
+    # Load the first env file that exists
+    for env_file in env_files:
+        if os.path.isfile(env_file):
+            load_dotenv(dotenv_path=env_file)
+            print(f"Loaded environment from {env_file}")
+            return env_file
+
+    # Fall back to default if no env file found
+    return None
+
+
+ENV_FILE = load_env_file()
+
+
+# Parse list values from environment variables
+def parse_list_from_env(env_key, default=None):
+    """Parse a comma-separated list from an environment variable."""
+    value = os.getenv(env_key)
+    if not value:
+        return default or []
+
+    # Remove quotes if they exist
+    value = value.strip("\"'")
+    # Handle single value case
+    if "," not in value:
+        return [value]
+    # Split comma-separated values
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+# Parse dict of lists from environment variables with prefix
+def parse_dict_of_lists_from_env(prefix, default_dict=None):
+    """Parse dictionary of lists from environment variables with a common prefix."""
+    result = default_dict or {}
+
+    # Look for all env vars with the given prefix
+    for key, value in os.environ.items():
+        if key.startswith(prefix):
+            endpoint = key[len(prefix) :].lower()  # Extract endpoint name
+            # Parse the values for this endpoint
+            if value:
+                value = value.strip("\"'")
+                if "," in value:
+                    result[endpoint] = [item.strip() for item in value.split(",") if item.strip()]
+                else:
+                    result[endpoint] = [value]
+
+    return result
+
+
+class Settings:
+    """Application settings without using pydantic."""
+
+    def __init__(self):
+        """Initialize application settings from environment variables.
+
+        Loads and sets all configuration values from environment variables,
+        with appropriate defaults for each setting. Also applies
+        environment-specific overrides based on the current environment.
+        """
+        # Set the environment
+        self.ENVIRONMENT = get_environment()
+
+        # Application Settings
+        self.PROJECT_NAME = os.getenv("PROJECT_NAME", "FastAPI LangGraph Template")
+        self.VERSION = os.getenv("VERSION", "1.0.0")
+        self.DESCRIPTION = os.getenv(
+            "DESCRIPTION", "A production-ready FastAPI template with LangGraph and Langfuse integration"
+        )
+        self.API_V1_STR = os.getenv("API_V1_STR", "/api/v1")
+        self.DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "t", "yes")
+
+        # CORS Settings
+        self.ALLOWED_ORIGINS = parse_list_from_env("ALLOWED_ORIGINS", ["*"])
+
+        # Langfuse Configuration
+        self.LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+        self.LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+        self.LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+
+        # LangGraph Configuration
+        self.LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+        self.LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+        self.DEFAULT_LLM_TEMPERATURE = float(os.getenv("DEFAULT_LLM_TEMPERATURE", "0.2"))
+        self.MAX_TOKENS = int(os.getenv("MAX_TOKENS", "2000"))
+        self.MAX_LLM_CALL_RETRIES = int(os.getenv("MAX_LLM_CALL_RETRIES", "3"))
+
+        # JWT Configuration
+        self.JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+        self.JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+        self.JWT_ACCESS_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_DAYS", "30"))
+
+        # Logging Configuration
+        self.LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
+        self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+        self.LOG_FORMAT = os.getenv("LOG_FORMAT", "json")  # "json" or "console"
+
+        # Postgres Configuration
+        self.POSTGRES_URL = os.getenv("POSTGRES_URL", "")
+        # Create LangGraph-compatible URL (pure postgresql://) from the SQLAlchemy URL
+        self.POSTGRES_URL_LANGGRAPH = self.POSTGRES_URL.replace("postgresql+psycopg://", "postgresql://") if self.POSTGRES_URL else ""
+        self.POSTGRES_POOL_SIZE = int(os.getenv("POSTGRES_POOL_SIZE", "20"))
+        self.POSTGRES_MAX_OVERFLOW = int(os.getenv("POSTGRES_MAX_OVERFLOW", "10"))
+        self.CHECKPOINT_TABLES = ["checkpoint_blobs", "checkpoint_writes", "checkpoints"]
+
+        # Rate Limiting Configuration
+        self.RATE_LIMIT_DEFAULT = parse_list_from_env("RATE_LIMIT_DEFAULT", ["200 per day", "50 per hour"])
+
+        # Rate limit endpoints defaults
+        default_endpoints = {
+            "chat": ["30 per minute"],
+            "chat_stream": ["20 per minute"],
+            "messages": ["50 per minute"],
+            "register": ["10 per hour"],
+            "login": ["20 per minute"],
+            "root": ["10 per minute"],
+            "health": ["20 per minute"],
+        }
+
+        # Update rate limit endpoints from environment variables
+        self.RATE_LIMIT_ENDPOINTS = default_endpoints.copy()
+        for endpoint in default_endpoints:
+            env_key = f"RATE_LIMIT_{endpoint.upper()}"
+            value = parse_list_from_env(env_key)
+            if value:
+                self.RATE_LIMIT_ENDPOINTS[endpoint] = value
+
+        # Evaluation Configuration
+        self.EVALUATION_LLM = os.getenv("EVALUATION_LLM", "gpt-4o-mini")
+        self.EVALUATION_BASE_URL = os.getenv("EVALUATION_BASE_URL", "https://api.openai.com/v1")
+        self.EVALUATION_API_KEY = os.getenv("EVALUATION_API_KEY", self.LLM_API_KEY)
+        self.EVALUATION_SLEEP_TIME = int(os.getenv("EVALUATION_SLEEP_TIME", "10"))
+
+        # Apply environment-specific settings
+        self.apply_environment_settings()
+
+    def apply_environment_settings(self):
+        """Apply environment-specific settings based on the current environment."""
+        env_settings = {
+            Environment.DEVELOPMENT: {
+                "DEBUG": True,
+                "LOG_LEVEL": "DEBUG",
+                "LOG_FORMAT": "console",
+                "RATE_LIMIT_DEFAULT": ["1000 per day", "200 per hour"],
+            },
+            Environment.STAGING: {
+                "DEBUG": False,
+                "LOG_LEVEL": "INFO",
+                "RATE_LIMIT_DEFAULT": ["500 per day", "100 per hour"],
+            },
+            Environment.PRODUCTION: {
+                "DEBUG": False,
+                "LOG_LEVEL": "WARNING",
+                "RATE_LIMIT_DEFAULT": ["200 per day", "50 per hour"],
+            },
+            Environment.TEST: {
+                "DEBUG": True,
+                "LOG_LEVEL": "DEBUG",
+                "LOG_FORMAT": "console",
+                "RATE_LIMIT_DEFAULT": ["1000 per day", "1000 per hour"],  # Relaxed for testing
+            },
+        }
+
+        # Get settings for current environment
+        current_env_settings = env_settings.get(self.ENVIRONMENT, {})
+
+        # Apply settings if not explicitly set in environment variables
+        for key, value in current_env_settings.items():
+            env_var_name = key.upper()
+            # Only override if environment variable wasn't explicitly set
+            if env_var_name not in os.environ:
+                setattr(self, key, value)
+
+
+# Create settings instance
+settings = Settings()

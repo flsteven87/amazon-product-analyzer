@@ -1,15 +1,5 @@
-"""
-Services module for Amazon Product Analyzer backend.
+"""This file contains the services for the application."""
 
-This module provides business logic services including
-scraper services and analysis services.
-"""
+from app.services.database import database_service
 
-# Services will be implemented in Phase 2
-# from .scraper_service import ScraperService
-# from .analysis_service import AnalysisService
-
-__all__ = [
-    # "ScraperService",
-    # "AnalysisService",
-] 
+__all__ = ["database_service"]
