@@ -33,39 +33,66 @@ class AmazonCompetitorExtractor:
 
     def __init__(self):
         self.recommendation_selectors = {
-            # Sponsored products section - highest priority
-            "sponsored_detail": {
-                "container": "[id*='sp_detail_thematic']",
-                "items": "[data-asin][data-adfeedbackdetails]",
+            # Customers who viewed this item also viewed - highest priority
+            "customers_also_viewed": {
+                "container": "[data-feature-name='customers-who-viewed'], [id*='customers-who-viewed'], [data-feature-name='dp-desktop-btf']",
+                "items": "[data-asin]:not([data-asin=''])",
                 "confidence": 0.95,
             },
-            # Similar items recommendations
-            "similar_items": {
-                "container": "[id*='sims-consolidated'], [data-feature-name*='sims']",
+            # Frequently bought together
+            "frequently_bought_together": {
+                "container": "[data-feature-name='frequently-bought-together'], [id*='frequently-bought']",
+                "items": "[data-asin]:not([data-asin=''])",
+                "confidence": 0.93,
+            },
+            # Products related to this item
+            "related_products": {
+                "container": "[data-feature-name*='related'], [id*='related-products'], [data-feature-name='sp-atf']",
                 "items": "[data-asin]:not([data-asin=''])",
                 "confidence": 0.9,
             },
-            # General sponsored products
-            "sponsored_products": {
-                "container": "[id*='sponsored'], [class*='sponsored']",
-                "items": "[data-asin]",
+            # Sponsored products section
+            "sponsored_detail": {
+                "container": "[id*='sp_detail_thematic'], [data-feature-name*='sponsored']",
+                "items": "[data-asin][data-adfeedbackdetails], [data-asin]:not([data-asin=''])",
+                "confidence": 0.88,
+            },
+            # Similar items recommendations  
+            "similar_items": {
+                "container": "[id*='sims-consolidated'], [data-feature-name*='sims'], [data-feature-name='similarities']",
+                "items": "[data-asin]:not([data-asin=''])",
                 "confidence": 0.85,
             },
+            # Compare similar items section
+            "compare_similar": {
+                "container": "[data-feature-name='compare-similar-items'], [id*='compare-similar']",
+                "items": "[data-asin]:not([data-asin=''])",
+                "confidence": 0.82,
+            },
+            # Carousel recommendations (generic)
+            "carousel_items": {
+                "container": ".a-carousel, [data-feature-name*='carousel']",
+                "items": ".a-carousel-card[data-asin], [data-asin]:not([data-asin=''])",
+                "confidence": 0.75,
+            },
             # Personalized recommendations
-            "personalized": {"container": "[class*='p13n-asin']", "items": "[data-asin]", "confidence": 0.8},
-            # Carousel recommendations
-            "carousel_items": {"container": ".a-carousel", "items": ".a-carousel-card[data-asin]", "confidence": 0.75},
-            # Related product recommendations
-            "related_products": {
-                "container": "[id*='related'], [id*='similar']",
-                "items": "[data-asin]",
+            "personalized": {
+                "container": "[class*='p13n-asin'], [data-feature-name*='personal']",
+                "items": "[data-asin]:not([data-asin=''])",
                 "confidence": 0.7,
+            },
+            # General data-asin fallback
+            "general_recommendations": {
+                "container": "body",
+                "items": "[data-asin]:not([data-asin=''])",
+                "confidence": 0.5,
             },
         }
 
     async def extract_competitors(self, html_content: str, main_product_asin: str) -> List[CompetitorCandidate]:
         """從Amazon頁面HTML提取競品候選者。"""
         logger.info(f"Extracting competitors for main product: {main_product_asin}")
+        logger.info(f"HTML content length: {len(html_content)} characters")
 
         # 使用 selectolax 進行高效HTML解析
         tree = HTMLParser(html_content)
@@ -73,8 +100,18 @@ class AmazonCompetitorExtractor:
         competitors = []
         seen_asins = {main_product_asin}  # 避免重複和包含主產品
 
+        # 調試：檢查頁面中所有data-asin元素
+        all_data_asin_elements = tree.css("[data-asin]")
+        logger.info(f"Total data-asin elements found: {len(all_data_asin_elements)}")
+        
+        # 顯示前5個ASIN作為調試信息
+        for i, elem in enumerate(all_data_asin_elements[:5]):
+            asin = elem.attributes.get("data-asin", "")
+            logger.info(f"Sample ASIN {i+1}: {asin}")
+
         # 遍歷所有推薦區域
         for section_name, selector_config in self.recommendation_selectors.items():
+            logger.info(f"Processing section: {section_name}")
             section_competitors = await self._extract_from_section(tree, section_name, selector_config, seen_asins)
             competitors.extend(section_competitors)
 
@@ -82,11 +119,13 @@ class AmazonCompetitorExtractor:
             seen_asins.update(comp.asin for comp in section_competitors)
 
             logger.info(f"Found {len(section_competitors)} competitors from {section_name}")
+            for comp in section_competitors[:3]:  # 顯示前3個作為樣本
+                logger.info(f"  Sample: {comp.asin} - {comp.title[:50]}...")
 
         # 智能過濾和排序
         filtered_competitors = self._filter_and_rank_competitors(competitors, main_product_asin)
 
-        logger.info(f"Final competitor count: {len(filtered_competitors)}")
+        logger.info(f"Raw competitors: {len(competitors)}, Filtered competitors: {len(filtered_competitors)}")
         return filtered_competitors[:10]  # 返回top 10競品
 
     async def _extract_from_section(

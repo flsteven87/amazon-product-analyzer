@@ -42,6 +42,9 @@ class DataCollectorAgent(BaseAgent):
 
         if analysis_phase == "competitor_collection":
             return asyncio.run(self._collect_competitor_data(state))
+        elif analysis_phase == "competitor_retry":
+            self.logger.info("Executing competitor retry - focusing on competitor discovery")
+            return self._retry_competitor_discovery(state)
         else:
             return self._collect_main_product_data(state)
 
@@ -159,21 +162,115 @@ class DataCollectorAgent(BaseAgent):
 
         return state
 
+    def _retry_competitor_discovery(self, state: AnalysisState) -> AnalysisState:
+        """Retry competitor discovery with enhanced strategies."""
+        product_url = state["product_url"]
+        retry_count = state.get("competitor_retry_count", 0)
+        
+        self.logger.info(f"Retrying competitor discovery (attempt {retry_count}) for: {product_url}")
+        
+        # Update progress
+        self._update_progress(state, 15)
+        
+        try:
+            # Use enhanced scraping with more aggressive competitor detection
+            scraping_result = self._run_async_scraping(product_url)
+            
+            main_product = scraping_result.get("main_product")
+            competitor_candidates = scraping_result.get("competitor_candidates", [])
+            main_asin = scraping_result.get("main_asin")
+            
+            self.logger.info(f"Retry attempt {retry_count}: Found {len(competitor_candidates)} competitor candidates")
+            
+            if competitor_candidates:
+                # Success! Update state with found competitors
+                state["competitor_candidates"] = [
+                    {
+                        "asin": candidate.asin,
+                        "title": candidate.title,
+                        "price": candidate.price,
+                        "rating": candidate.rating,
+                        "review_count": candidate.review_count,
+                        "brand": candidate.brand,
+                        "url": candidate.url,
+                        "source_section": candidate.source_section,
+                        "confidence_score": candidate.confidence_score,
+                    }
+                    for candidate in competitor_candidates
+                ]
+                
+                # Save competitor candidates to database
+                if main_asin and competitor_candidates:
+                    self._save_competitors_sync([
+                        {
+                            "asin": c.asin,
+                            "title": c.title,
+                            "price": c.price,
+                            "rating": c.rating,
+                            "review_count": c.review_count,
+                            "brand": c.brand,
+                            "source_section": c.source_section,
+                            "confidence_score": c.confidence_score,
+                        }
+                        for c in competitor_candidates
+                    ], main_asin)
+                
+                self.logger.info(f"Competitor retry successful: {len(competitor_candidates)} candidates found")
+                state["messages"].append(
+                    AIMessage(
+                        content=f"DataCollector: Retry successful - found {len(competitor_candidates)} competitor candidates"
+                    )
+                )
+            else:
+                self.logger.warning(f"Competitor retry {retry_count} failed - no competitors found")
+                state["messages"].append(
+                    AIMessage(content=f"DataCollector: Retry attempt {retry_count} - no competitors found")
+                )
+            
+            # Update progress
+            self._update_progress(state, 30)
+            
+        except Exception as e:
+            self.logger.error(f"Error in competitor retry: {str(e)}")
+            state["messages"].append(
+                AIMessage(content=f"DataCollector: Retry failed with error: {str(e)}")
+            )
+        
+        return state
+
     def _run_async_scraping(self, product_url: str) -> Dict[str, Any]:
         """Run async scraping in a safe way that handles event loop contexts."""
         try:
             # Check if we're already in an async context
-            asyncio.get_running_loop()
-            # If there's a running loop, we can't use asyncio.run()
-            # Fall back to a simpler sync approach for now
-            self.logger.warning("Running in async context, using simplified scraping")
-
-            # For now, return minimal data to trigger LLM fallback
-            # TODO: Implement proper async handling in future
-            return {"main_product": None, "competitor_candidates": [], "main_asin": None}
+            loop = asyncio.get_running_loop()
+            # If there's a running loop, create a task instead of using asyncio.run
+            self.logger.info("Running in async context, creating task for scraping")
+            
+            # Create a task and run it synchronously
+            task = loop.create_task(self._scrape_with_competitors(product_url))
+            
+            # Wait for the task to complete
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(self._run_task_sync, task)
+                return future.result(timeout=30)  # 30 second timeout
+                
         except RuntimeError:
             # No running loop, safe to use asyncio.run
+            self.logger.info("No running loop, using asyncio.run for scraping")
             return asyncio.run(self._scrape_with_competitors(product_url))
+        except Exception as e:
+            self.logger.error(f"Async scraping failed: {str(e)}")
+            # Fallback to minimal data
+            return {"main_product": None, "competitor_candidates": [], "main_asin": None}
+    
+    def _run_task_sync(self, task):
+        """Helper method to run async task synchronously."""
+        import time
+        # Wait for task completion
+        while not task.done():
+            time.sleep(0.1)
+        return task.result()
 
     async def _scrape_with_competitors(self, product_url: str) -> Dict[str, Any]:
         """Scrape product data and discover competitors using scraper's built-in method."""

@@ -106,6 +106,10 @@ class SupervisorAgent(BaseAgent):
             status["competitor_count"] = len(competitor_candidates)
             status["competitor_data_source"] = "candidates"
             self.logger.info(f"Status: Using {len(competitor_candidates)} competitor candidates for analysis")
+            
+            # Quality check: warn if competitor count is too low
+            if len(competitor_candidates) < 3:
+                status["warnings"].append(f"Low competitor count ({len(competitor_candidates)}) - analysis may be limited")
         else:
             # Check if we're still in data collection phase (no competitors discovered yet)
             if not status["product_data_collected"]:
@@ -115,12 +119,22 @@ class SupervisorAgent(BaseAgent):
                 status["competitor_data_source"] = "pending"
                 self.logger.info("Status: Competitor discovery pending - main product collection not complete")
             else:
-                # Product data collected but no competitors found
-                status["competitor_data_collected"] = True
-                status["competitor_count"] = 0
-                status["competitor_data_source"] = "none"
-                status["warnings"].append("No competitor candidates discovered during data collection")
-                self.logger.info("Status: No competitors discovered during data collection")
+                # Product data collected but no competitors found - this is a problem
+                competitor_retry_count = state.get("competitor_retry_count", 0)
+                if competitor_retry_count < 2:  # Allow up to 2 retries
+                    status["competitor_data_collected"] = False
+                    status["competitor_count"] = 0
+                    status["competitor_data_source"] = "retry_needed"
+                    status["warnings"].append(f"No competitors found, retry {competitor_retry_count + 1}/2")
+                    state["competitor_retry_count"] = competitor_retry_count + 1
+                    self.logger.warning(f"No competitors found, scheduling retry {competitor_retry_count + 1}")
+                else:
+                    # Max retries reached, proceed without competitors
+                    status["competitor_data_collected"] = True
+                    status["competitor_count"] = 0
+                    status["competitor_data_source"] = "none"
+                    status["warnings"].append("No competitor candidates discovered after retries - proceeding with limited analysis")
+                    self.logger.warning("Status: No competitors discovered after retries, proceeding with limited analysis")
 
         # Check market analysis
         market_analysis = state.get("market_analysis", {})
@@ -140,18 +154,27 @@ class SupervisorAgent(BaseAgent):
 
     def _determine_next_agent(self, state: AnalysisState, workflow_status: Dict[str, Any]) -> str:
         """Determine next agent using enhanced business logic with competitor analysis."""
-        # Simplified workflow - use competitor candidates directly for analysis
+        # Enhanced workflow with competitor retry logic
         # Phase 1: Main product data collection (includes competitor discovery)
         if not workflow_status["product_data_collected"]:
             state["analysis_phase"] = "main_product"
+            return "data_collector"
+
+        # Phase 1.5: Competitor retry if needed
+        elif (workflow_status["product_data_collected"] and 
+              workflow_status.get("competitor_data_source") == "retry_needed"):
+            self.logger.info("Retrying competitor discovery")
+            state["analysis_phase"] = "competitor_retry"
             return "data_collector"
 
         # Phase 2: Market analysis (with available competitor data)
         elif workflow_status["product_data_collected"] and not workflow_status["market_analysis_completed"]:
             # Determine analysis type based on available competitor data
             competitor_count = workflow_status.get("competitor_count", 0)
+            competitor_source = workflow_status.get("competitor_data_source", "none")
+            
             if competitor_count > 0:
-                self.logger.info(f"Proceeding to competitive analysis with {competitor_count} competitors")
+                self.logger.info(f"Proceeding to competitive analysis with {competitor_count} competitors from {competitor_source}")
                 state["analysis_phase"] = "competitive_analysis"
             else:
                 self.logger.info("No competitors available, proceeding to basic market analysis")
@@ -163,12 +186,12 @@ class SupervisorAgent(BaseAgent):
             state["analysis_phase"] = "optimization"
             return "optimization_advisor"
 
-        # NEW Phase 4: Report synthesis and quality enhancement
-        elif (workflow_status["product_data_collected"] and 
-              workflow_status["market_analysis_completed"] and 
-              workflow_status["optimization_completed"] and
-              state.get("analysis_phase") != "report_synthesis"):
-            return self._perform_report_synthesis(state)
+        # NEW Phase 4: Report synthesis and quality enhancement (TEMPORARILY DISABLED)
+        # elif (workflow_status["product_data_collected"] and 
+        #       workflow_status["market_analysis_completed"] and 
+        #       workflow_status["optimization_completed"] and
+        #       state.get("analysis_phase") != "report_synthesis"):
+        #     return self._perform_report_synthesis(state)
 
         # All phases complete including synthesis
         else:
@@ -326,6 +349,23 @@ class SupervisorAgent(BaseAgent):
             asin = state.get("asin", "Unknown")
             competitor_info = self._get_competitor_summary(state)
             
+            self.logger.info(f"Starting synthesis for ASIN: {asin}")
+            self.logger.info(f"Original market analysis length: {len(market_analysis.get('analysis', ''))}")
+            self.logger.info(f"Original optimization length: {len(optimization_advice.get('recommendations', ''))}")
+            self.logger.info(f"Competitor info: {competitor_info}")
+            
+            # 檢查原始數據質量
+            original_market = market_analysis.get('analysis', '')
+            original_optimization = optimization_advice.get('recommendations', '')
+            
+            if len(original_market) < 50 and len(original_optimization) < 50:
+                self.logger.warning("Original content too short, skipping synthesis")
+                return {
+                    "product_overview": self._extract_content_for_synthesis(product_data),
+                    "market_analysis": original_market or "Market analysis data insufficient for detailed report",
+                    "optimization_recommendations": original_optimization or "Optimization recommendations data insufficient"
+                }
+            
             # 構建LLM prompt進行內容重新綜合
             prompt = f"""You are a professional product analysis report editor. Based on the following original analysis content, reorganize and rewrite to generate more coherent, specific, and valuable analysis reports.
 
@@ -355,21 +395,37 @@ Please provide separately:
 2. **Reorganized Market Analysis** 
 3. **Reorganized Optimization Recommendations**
 
-Format requirement: Each section should start with "### [Section Name]"."""
+Format requirement: Each section should start with "### [Section Name]" and contain substantial content."""
 
+            self.logger.info("Sending synthesis request to LLM")
             response = self.llm.invoke([HumanMessage(content=prompt)])
             content = response.content
             
+            self.logger.info(f"LLM response length: {len(content)}")
+            
             # 解析LLM回應，分離各個部分
-            return self._parse_synthesized_content(content)
+            synthesized = self._parse_synthesized_content(content)
+            
+            # 驗證synthesis結果
+            for key, value in synthesized.items():
+                if "Synthesis failed" in value or len(value) < 20:
+                    self.logger.warning(f"Synthesis failed for {key}, using original content")
+                    if key == "product_overview":
+                        synthesized[key] = self._extract_content_for_synthesis(product_data)
+                    elif key == "market_analysis":
+                        synthesized[key] = market_analysis.get("analysis", "Original market analysis not available")
+                    elif key == "optimization_recommendations":
+                        synthesized[key] = optimization_advice.get("recommendations", "Original optimization recommendations not available")
+            
+            return synthesized
             
         except Exception as e:
-            self.logger.error(f"Content synthesis failed: {str(e)}")
+            self.logger.error(f"Content synthesis failed: {str(e)}", exc_info=True)
             # 返回原始內容
             return {
                 "product_overview": self._extract_content_for_synthesis(product_data),
-                "market_analysis": market_analysis.get("analysis", ""),
-                "optimization_recommendations": optimization_advice.get("recommendations", "")
+                "market_analysis": market_analysis.get("analysis", "Market analysis processing error"),
+                "optimization_recommendations": optimization_advice.get("recommendations", "Optimization recommendations processing error")
             }
 
     def _get_competitor_summary(self, state: AnalysisState) -> str:
@@ -403,17 +459,48 @@ Format requirement: Each section should start with "### [Section Name]"."""
             "optimization_recommendations": ""
         }
         
-        # 分割內容
+        self.logger.info(f"Parsing synthesized content, length: {len(content)}")
+        self.logger.debug(f"Raw LLM response: {content[:500]}...")
+        
+        # 更強健的分割邏輯
         sections = content.split("###")
         
-        for section in sections:
+        for i, section in enumerate(sections):
             section = section.strip()
-            if "Product Overview" in section:
-                result["product_overview"] = section.replace("Product Overview", "").strip()
-            elif "Market Analysis" in section:
-                result["market_analysis"] = section.replace("Market Analysis", "").strip()
+            self.logger.debug(f"Processing section {i}: {section[:100]}...")
+            
+            if "Product Overview" in section or "Reorganized Product Overview" in section:
+                # 提取內容，移除標題
+                content_text = section
+                for title in ["### Reorganized Product Overview", "### Product Overview", "Reorganized Product Overview", "Product Overview"]:
+                    content_text = content_text.replace(title, "").strip()
+                result["product_overview"] = content_text
+                self.logger.info(f"Extracted product overview: {len(content_text)} chars")
+                
+            elif "Market Analysis" in section or "Reorganized Market Analysis" in section:
+                # 提取內容，移除標題
+                content_text = section
+                for title in ["### Reorganized Market Analysis", "### Market Analysis", "Reorganized Market Analysis", "Market Analysis"]:
+                    content_text = content_text.replace(title, "").strip()
+                result["market_analysis"] = content_text
+                self.logger.info(f"Extracted market analysis: {len(content_text)} chars")
+                
             elif "Optimization" in section:
-                result["optimization_recommendations"] = section.replace("Optimization Recommendations", "").replace("Optimization", "").strip()
+                # 提取內容，移除標題
+                content_text = section
+                for title in ["### Reorganized Optimization Recommendations", "### Optimization Recommendations", "### Optimization", "Reorganized Optimization Recommendations", "Optimization Recommendations", "Optimization"]:
+                    content_text = content_text.replace(title, "").strip()
+                result["optimization_recommendations"] = content_text
+                self.logger.info(f"Extracted optimization recommendations: {len(content_text)} chars")
+        
+        # 檢查是否成功提取內容
+        total_extracted = sum(len(v) for v in result.values())
+        if total_extracted < 100:
+            self.logger.warning(f"Very little content extracted ({total_extracted} chars), synthesis may have failed")
+            # 如果解析失敗，返回錯誤標記
+            for key in result:
+                if not result[key]:
+                    result[key] = "Synthesis failed - content not properly parsed"
         
         return result
 
