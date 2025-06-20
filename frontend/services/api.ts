@@ -32,7 +32,7 @@ export class ApiService {
     return response.data;
   }
 
-  static async getAnalysisReport(taskId: string): Promise<AnalysisTask> {
+  static async getAnalysisReport(taskId: string): Promise<any> {
     const response = await apiClient.get(`/api/v1/product-analysis/tasks/${taskId}`);
     return response.data;
   }

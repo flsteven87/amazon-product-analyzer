@@ -22,9 +22,12 @@ export default function Home() {
     try {
       const task = await ApiService.startAnalysis(productUrl);
       router.push(`/analysis/${task.id}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to start analysis:', err);
-      setError(err.response?.data?.detail || 'Failed to start analysis. Please try again.');
+      const errorMessage = err instanceof Error && 'response' in err && err.response
+        ? (err.response as { data?: { detail?: string } }).data?.detail || 'Failed to start analysis. Please try again.'
+        : 'Failed to start analysis. Please try again.';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

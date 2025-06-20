@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import ReactMarkdown from 'react-markdown';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { NotionReport } from '@/components/ui/notion-report';
 import { ApiService } from '@/services/api';
 import { AnalysisTask, AnalysisReport } from '@/types';
 
@@ -16,6 +16,7 @@ export default function AnalysisPage() {
   const [task, setTask] = useState<AnalysisTask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [productTitle, setProductTitle] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch task status and report
@@ -25,9 +26,24 @@ export default function AnalysisPage() {
       const taskData = await ApiService.getAnalysisStatus(taskId);
       setTask(taskData);
       
-      if (taskData.status === 'completed') {
-        const reportData = await ApiService.getAnalysisReport(taskId);
-        setReport(reportData);
+      // Try to get full task data if completed or if we don't have a product title yet
+      if (taskData.status === 'completed' || !productTitle) {
+        try {
+          const fullTaskData = await ApiService.getAnalysisReport(taskId);
+          
+          // Extract product title if available
+          if (fullTaskData.product && fullTaskData.product.title) {
+            setProductTitle(fullTaskData.product.title);
+          }
+          
+          // Extract the first report from the reports array (only if completed)
+          if (taskData.status === 'completed' && fullTaskData.reports && fullTaskData.reports.length > 0) {
+            setReport(fullTaskData.reports[0]);
+          }
+        } catch (reportError) {
+          // If getting full data fails, continue with basic status only
+          console.warn('Failed to fetch full task data:', reportError);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch task data:', err);
@@ -91,7 +107,9 @@ export default function AnalysisPage() {
       <main className="flex-1 container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Product Analysis</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              {productTitle || 'Product Analysis'}
+            </h1>
             <p className="text-gray-600">Task ID: {taskId}</p>
             <p className="text-gray-600">URL: {task.product_url}</p>
           </div>
@@ -124,10 +142,13 @@ export default function AnalysisPage() {
           </div>
 
           {task.status === 'completed' && report && (
-            <div className="bg-white p-6 rounded-lg shadow-sm border">
-              <h2 className="text-xl font-semibold mb-4">Analysis Report</h2>
-              <div className="prose max-w-none">
-                <ReactMarkdown>{report.content}</ReactMarkdown>
+            <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                <h2 className="text-xl font-semibold text-gray-800">📋 Analysis Report</h2>
+                <p className="text-sm text-gray-600 mt-1">Comprehensive product and market analysis</p>
+              </div>
+              <div className="p-6">
+                <NotionReport content={report.content} />
               </div>
             </div>
           )}
