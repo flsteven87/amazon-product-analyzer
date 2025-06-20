@@ -26,24 +26,66 @@ dev:
 	@echo "Starting server in development environment"
 	@bash -c "source scripts/set_env.sh development && uv run uvicorn app.main:app --reload --port 8000"
 
-# Evaluation commands
-eval:
-	@echo "Running evaluation with interactive mode"
-	@bash -c "source scripts/set_env.sh ${ENV:-development} && python -m evals.main --interactive"
+# Core system commands
+test-core:
+	@echo "Testing core multi-agent system"
+	@bash -c "source scripts/set_env.sh development && uv run python -c \"from app.core.graph.workflow import create_analysis_workflow; print('✅ Core system imports OK')\""
 
-eval-quick:
-	@echo "Running evaluation with default settings"
-	@bash -c "source scripts/set_env.sh ${ENV:-development} && python -m evals.main --quick"
+health:
+	@echo "Checking API health"
+	@curl -s http://localhost:8000/health | uv run python -m json.tool || echo "❌ API not responding"
 
-eval-no-report:
-	@echo "Running evaluation without generating report"
-	@bash -c "source scripts/set_env.sh ${ENV:-development} && python -m evals.main --no-report"
+# Streamlit commands
+streamlit:
+	@echo "Starting Streamlit testing interface"
+	@bash -c "source scripts/set_env.sh development && uv run streamlit run streamlit_app.py --server.port 8501"
 
+streamlit-dev:
+	@echo "Starting Streamlit in development mode"
+	@bash -c "source scripts/set_env.sh development && uv run streamlit run streamlit_app.py --server.port 8501 --server.runOnSave true"
+
+# Full stack commands
+full-stack:
+	@echo "Starting full stack (API + Streamlit)"
+	@echo "Starting API in background..."
+	@bash -c "source scripts/set_env.sh development && uv run uvicorn app.main:app --reload --port 8000" &
+	@sleep 3
+	@echo "Starting Streamlit..."
+	@bash -c "source scripts/set_env.sh development && uv run streamlit run streamlit_app.py --server.port 8501"
+
+# Database commands
+db-stats:
+	@bash -c "source scripts/set_env.sh development && uv run python -m app.cli db-stats"
+
+db-truncate:
+	@bash -c "source scripts/set_env.sh development && uv run python -m app.cli db-truncate"
+
+db-delete-asin:
+	@if [ -z "$(ASIN)" ]; then \
+		echo "ASIN is not set. Usage: make db-delete-asin ASIN=B0BZXLMM3H"; \
+		exit 1; \
+	fi
+	@bash -c "source scripts/set_env.sh development && uv run python -m app.cli db-delete --asin $(ASIN)"
+
+db-delete-task:
+	@if [ -z "$(TASK_ID)" ]; then \
+		echo "TASK_ID is not set. Usage: make db-delete-task TASK_ID=uuid-here"; \
+		exit 1; \
+	fi
+	@bash -c "source scripts/set_env.sh development && uv run python -m app.cli db-delete --task-id $(TASK_ID)"
+
+# Code quality commands
 lint:
-	ruff check .
+	@echo "Running linter with uv"
+	@bash -c "source scripts/set_env.sh development && uv run ruff check ."
 
 format:
-	ruff format .
+	@echo "Formatting code with uv"
+	@bash -c "source scripts/set_env.sh development && uv run ruff format ."
+
+check:
+	@echo "Running format and lint checks"
+	@bash -c "source scripts/set_env.sh development && uv run ruff format . && uv run ruff check ."
 
 clean:
 	rm -rf .venv
@@ -136,10 +178,18 @@ help:
 	@echo "  prod: Run server in production environment"
 	@echo "  staging: Run server in staging environment"
 	@echo "  dev: Run server in development environment"
-	@echo "  eval: Run evaluation with interactive mode"
-	@echo "  eval-quick: Run evaluation with default settings"
-	@echo "  eval-no-report: Run evaluation without generating report"
-	@echo "  test: Run tests"
+	@echo "  test-core: Test core multi-agent system imports"
+	@echo "  health: Check API health status"
+	@echo "  streamlit: Start Streamlit testing interface"
+	@echo "  streamlit-dev: Start Streamlit in development mode"
+	@echo "  full-stack: Start both API and Streamlit"
+	@echo "  db-stats: Show database statistics"
+	@echo "  db-truncate: Truncate all database tables (DANGEROUS!)"
+	@echo "  db-delete-asin ASIN=<asin>: Delete all data for specific ASIN"
+	@echo "  db-delete-task TASK_ID=<id>: Delete all data for specific task"
+	@echo "  lint: Run code linter"
+	@echo "  format: Format code"
+	@echo "  check: Run format and lint checks"
 	@echo "  clean: Clean up"
 	@echo "  docker-build: Build default Docker image"
 	@echo "  docker-build-env ENV=<environment>: Build Docker image for specific environment"

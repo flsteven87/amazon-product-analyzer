@@ -1,19 +1,32 @@
 """This file contains the schemas for the application."""
 
-from app.schemas.auth import Token
-from app.schemas.chat import (
-    ChatRequest,
-    ChatResponse,
-    Message,
-    StreamResponse,
+from app.schemas.analysis import (
+    AnalysisTaskCreate,
+    AnalysisTaskUpdate,
+    AnalysisTaskResponse,
+    AnalysisTaskDetailResponse,
+    AnalysisTaskSummary,
+    AnalysisStats,
+    ProductResponse,
+    CompetitorResponse,
+    AnalysisReportResponse,
+    AgentExecutionResponse,
+    BatchAnalysisRequest,
+    BatchAnalysisResponse,
 )
-from app.schemas.graph import GraphState
 
 __all__ = [
-    "Token",
-    "ChatRequest",
-    "ChatResponse",
-    "Message",
-    "StreamResponse",
-    "GraphState",
+    # Analysis schemas
+    "AnalysisTaskCreate",
+    "AnalysisTaskUpdate",
+    "AnalysisTaskResponse",
+    "AnalysisTaskDetailResponse",
+    "AnalysisTaskSummary",
+    "AnalysisStats",
+    "ProductResponse",
+    "CompetitorResponse",
+    "AnalysisReportResponse",
+    "AgentExecutionResponse",
+    "BatchAnalysisRequest",
+    "BatchAnalysisResponse",
 ]

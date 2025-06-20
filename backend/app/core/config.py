@@ -42,7 +42,7 @@ def get_environment() -> Environment:
         Environment: The current environment (development, staging, production, or test)
     """
     env = os.getenv("APP_ENV", "development").lower()
-    
+
     if env in ("production", "prod"):
         return Environment.PRODUCTION
     elif env in ("staging", "stage"):
@@ -168,7 +168,9 @@ class Settings:
         # Postgres Configuration
         self.POSTGRES_URL = os.getenv("POSTGRES_URL", "")
         # Create LangGraph-compatible URL (pure postgresql://) from the SQLAlchemy URL
-        self.POSTGRES_URL_LANGGRAPH = self.POSTGRES_URL.replace("postgresql+psycopg://", "postgresql://") if self.POSTGRES_URL else ""
+        self.POSTGRES_URL_LANGGRAPH = (
+            self.POSTGRES_URL.replace("postgresql+psycopg://", "postgresql://") if self.POSTGRES_URL else ""
+        )
         self.POSTGRES_POOL_SIZE = int(os.getenv("POSTGRES_POOL_SIZE", "20"))
         self.POSTGRES_MAX_OVERFLOW = int(os.getenv("POSTGRES_MAX_OVERFLOW", "10"))
         self.CHECKPOINT_TABLES = ["checkpoint_blobs", "checkpoint_writes", "checkpoints"]
