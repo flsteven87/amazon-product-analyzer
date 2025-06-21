@@ -8,12 +8,14 @@ export class NativeWebSocketService {
   private eventHandlers: Map<string, Function[]> = new Map();
 
   constructor() {
-    const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8000';
+    // Use the same base URL as API, but for WebSocket
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    
     // Convert HTTP URL to WebSocket URL
-    if (baseUrl.startsWith('http://')) {
-      this.url = baseUrl.replace('http://', 'ws://') + '/api/v1/websocket/ws';
-    } else if (baseUrl.startsWith('https://')) {
-      this.url = baseUrl.replace('https://', 'wss://') + '/api/v1/websocket/ws';
+    if (apiUrl.startsWith('http://')) {
+      this.url = apiUrl.replace('http://', 'ws://') + '/api/v1/websocket/ws';
+    } else if (apiUrl.startsWith('https://')) {
+      this.url = apiUrl.replace('https://', 'wss://') + '/api/v1/websocket/ws';
     } else {
       this.url = 'ws://localhost:8000/api/v1/websocket/ws';
     }

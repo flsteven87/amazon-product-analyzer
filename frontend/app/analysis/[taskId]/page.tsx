@@ -58,8 +58,8 @@ export default function AnalysisPage() {
 
   // Try to establish WebSocket connection first, fallback to polling
   const setupRealtimeUpdates = async () => {
-    // Add a small delay to let the page load first
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Reduce delay to minimize timing issues
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
       // Try WebSocket connection
