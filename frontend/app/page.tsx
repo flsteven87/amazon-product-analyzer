@@ -42,7 +42,7 @@ export default function Home() {
             Amazon Product Analyzer
           </h1>
           <p className="text-xl text-gray-600 mb-12">
-            AI-powered product analysis with competitor insights and market intelligence
+            Multi-agent AI system for Amazon product analysis by single product URL
           </p>
           
           <div className="bg-white p-8 rounded-lg shadow-sm border">

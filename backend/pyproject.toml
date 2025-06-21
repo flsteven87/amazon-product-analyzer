@@ -41,6 +41,9 @@ dependencies = [
     "streamlit>=1.46.0",
     "pandas>=2.3.0",
     "click>=8.1.8",
+    # WebSocket dependencies (optional)
+    "python-socketio>=5.11.0",
+    "uvicorn[standard]>=0.34.0",
 ]
 
 [project.optional-dependencies]

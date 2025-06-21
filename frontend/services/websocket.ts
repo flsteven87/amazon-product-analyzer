@@ -12,23 +12,32 @@ export class WebSocketService {
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.socket = io(this.url, {
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'], // Allow fallback to polling
         autoConnect: false,
+        timeout: 5000, // 5 second timeout
+        forceNew: true, // Force new connection
       });
 
       this.socket.on('connect', () => {
         console.log('WebSocket connected');
+        clearTimeout(timeoutId);
         resolve();
       });
 
       this.socket.on('connect_error', (error) => {
-        console.error('WebSocket connection error:', error);
-        reject(error);
+        console.info('📡 WebSocket unavailable, falling back to polling (this is normal if backend is not running)');
+        clearTimeout(timeoutId);
+        reject(new Error(`WebSocket connection failed: ${error.message}`));
       });
 
       this.socket.on('disconnect', (reason) => {
         console.log('WebSocket disconnected:', reason);
       });
+
+      // Add timeout handling
+      const timeoutId = setTimeout(() => {
+        reject(new Error('WebSocket connection timeout'));
+      }, 6000);
 
       this.socket.connect();
     });

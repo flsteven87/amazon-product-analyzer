@@ -14,6 +14,16 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.services.database import database_service
 
+# Import simple WebSocket manager
+try:
+    from app.core.websocket_simple import simple_ws_manager
+    WEBSOCKET_AVAILABLE = True
+    logger.info("Simple WebSocket manager loaded successfully")
+except Exception as e:
+    logger.warning(f"WebSocket not available, continuing without it: {e}")
+    simple_ws_manager = None
+    WEBSOCKET_AVAILABLE = False
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -71,6 +81,12 @@ app.add_middleware(
 
 # Include API router
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# WebSocket is now handled through API routes
+if WEBSOCKET_AVAILABLE and simple_ws_manager:
+    logger.info("WebSocket endpoints available at /api/v1/websocket/ws")
+else:
+    logger.info("WebSocket not available - using HTTP polling only")
 
 
 @app.get("/")

@@ -16,6 +16,14 @@ from app.core.logging import logger
 from app.services.analysis_service import analysis_service
 from app.models.analysis import AnalysisStatus, ReportType
 
+# Optional WebSocket import - safe even if it fails
+try:
+    from app.core.websocket_simple import simple_ws_manager
+    WEBSOCKET_AVAILABLE = True
+except Exception:
+    simple_ws_manager = None
+    WEBSOCKET_AVAILABLE = False
+
 
 class ProductAnalysisWorkflow:
     """LangGraph workflow for product analysis with database integration."""
@@ -43,6 +51,42 @@ class ProductAnalysisWorkflow:
 
         # Create the workflow graph
         self.graph = self._create_graph()
+
+    async def _emit_progress_update(self, task_id: Optional[UUID], progress: int, status: str, agent_name: Optional[str] = None, message: Optional[str] = None):
+        """
+        Safely emit progress update via WebSocket if available.
+        
+        This method is safe to call even if WebSocket is not available.
+        The system continues to work normally through HTTP API.
+        """
+        if not WEBSOCKET_AVAILABLE:
+            logger.debug("WebSocket not available, skipping progress update")
+            return
+            
+        if not simple_ws_manager:
+            logger.warning("WebSocket manager not available")
+            return
+            
+        if not task_id:
+            logger.warning("No task_id provided for WebSocket update")
+            return
+        
+        try:
+            logger.info(f"🚀 Attempting WebSocket progress update: task={task_id}, progress={progress}%, status={status}")
+            
+            await simple_ws_manager.emit_progress_update(
+                task_id=str(task_id),
+                progress=progress,
+                status=status,
+                agent_name=agent_name,
+                message=message
+            )
+            logger.info(f"✅ WebSocket progress update successful: {progress}% for task {task_id}")
+        except Exception as e:
+            # Log but don't fail - WebSocket is optional
+            logger.error(f"💥 WebSocket progress update failed (non-critical): {e}")
+            import traceback
+            logger.error(f"WebSocket error traceback: {traceback.format_exc()}")
 
     def _create_graph(self) -> StateGraph:
         """Create the LangGraph state graph."""
@@ -104,6 +148,24 @@ class ProductAnalysisWorkflow:
         # Update final progress
         state["progress"] = 100
         state["status"] = "completed"
+        
+        # Optional WebSocket update - safe even if WebSocket is not available
+        task_id = state.get("task_id")
+        if task_id:
+            try:
+                # This is async but we run it safely
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self._emit_progress_update(
+                        task_id=task_id,
+                        progress=100,
+                        status="completed",
+                        message="Analysis completed successfully"
+                    ))
+            except Exception:
+                # WebSocket update is optional - don't fail if it doesn't work
+                pass
 
         # Extract data for report compilation
         product_data = state.get("product_data", {})
@@ -337,6 +399,14 @@ class ProductAnalysisWorkflow:
 
                 update_data = AnalysisTaskUpdate(status=AnalysisStatus.PROCESSING, progress=5)
                 await analysis_service.update_analysis_task(task_id, update_data)
+                
+                # Optional WebSocket update - safe even if WebSocket is not available
+                await self._emit_progress_update(
+                    task_id=task_id,
+                    progress=5,
+                    status="processing",
+                    message="Analysis started"
+                )
 
             # Run the graph
             final_state = await self.graph.ainvoke(initial_state)

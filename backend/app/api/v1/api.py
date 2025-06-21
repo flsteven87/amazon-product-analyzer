@@ -2,13 +2,16 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import product_analysis
+from app.api.v1 import product_analysis, websocket
 from app.core.logging import logger
 
 api_router = APIRouter()
 
 # Include product analysis routes
 api_router.include_router(product_analysis.router, prefix="/product-analysis", tags=["product-analysis"])
+
+# Include WebSocket routes
+api_router.include_router(websocket.router, prefix="/websocket", tags=["websocket"])
 
 
 # Health check endpoint

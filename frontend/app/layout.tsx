@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Amazon Product Analyzer",
-  description: "AI-powered Amazon product analysis",
+  title: "Amazon Product Analyzer - Multi-Agent Intelligence",
+  description: "Advanced Amazon product analysis powered by LangGraph multi-agent architecture with competitor insights, market intelligence, and optimization recommendations",
 };
 
 export default function RootLayout({

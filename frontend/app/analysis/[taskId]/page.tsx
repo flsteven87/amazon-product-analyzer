@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { NotionReport } from '@/components/ui/notion-report';
 import { ApiService } from '@/services/api';
+import { wsService } from '@/services/websocket_native';
 import { AnalysisTask, AnalysisReport } from '@/types';
 
 export default function AnalysisPage() {
@@ -18,6 +19,8 @@ export default function AnalysisPage() {
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [productTitle, setProductTitle] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [useWebSocket, setUseWebSocket] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
 
   // Fetch task status and report
   const fetchTaskData = async () => {
@@ -53,18 +56,80 @@ export default function AnalysisPage() {
     }
   };
 
+  // Try to establish WebSocket connection first, fallback to polling
+  const setupRealtimeUpdates = async () => {
+    // Add a small delay to let the page load first
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    try {
+      // Try WebSocket connection
+      await wsService.connect();
+      wsService.subscribeToTask(taskId);
+      setWsConnected(true);
+      setUseWebSocket(true);
+      
+      // Set up WebSocket event handlers
+      wsService.onProgressUpdate((update) => {
+        console.log('WebSocket progress update:', update);
+        setTask(prev => prev ? {
+          ...prev,
+          progress: update.progress,
+          status: update.status as 'pending' | 'processing' | 'completed' | 'failed'
+        } : null);
+      });
+      
+      wsService.onAnalysisComplete((data) => {
+        console.log('WebSocket analysis complete:', data);
+        if (data.report) {
+          setReport(data.report);
+        }
+        setTask(prev => prev ? { ...prev, status: 'completed' } : null);
+      });
+      
+      wsService.onError((error) => {
+        console.info('WebSocket error, gracefully falling back to polling:', error);
+        setUseWebSocket(false);
+        setWsConnected(false);
+      });
+      
+      console.log('✅ WebSocket connected successfully');
+      
+    } catch {
+      console.info('ℹ️ WebSocket unavailable, using polling (this is normal)');
+      setUseWebSocket(false);
+      setWsConnected(false);
+    }
+  };
+
+  // Initial data fetch
   useEffect(() => {
     fetchTaskData();
+  }, [taskId]);
+
+  // WebSocket setup
+  useEffect(() => {
+    setupRealtimeUpdates();
     
-    // Poll every 3 seconds if task is still processing
+    return () => {
+      // Clean up WebSocket connection
+      if (wsConnected) {
+        wsService.unsubscribeFromTask(taskId);
+        wsService.disconnect();
+      }
+    };
+  }, [taskId]);
+
+  // Polling setup for when WebSocket is not available
+  useEffect(() => {
     const interval = setInterval(() => {
-      if (task && (task.status === 'processing' || task.status === 'pending')) {
+      // Only poll if WebSocket is not working and task is still processing
+      if (!useWebSocket && task && (task.status === 'processing' || task.status === 'pending')) {
         fetchTaskData();
       }
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [taskId, task?.status]);
+  }, [useWebSocket, task?.status]);
 
   if (isLoading && !task) {
     return (
@@ -121,7 +186,22 @@ export default function AnalysisPage() {
           )}
 
           <div className="bg-white p-6 rounded-lg shadow-sm border mb-6">
-            <h2 className="text-xl font-semibold mb-4">Status</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Status</h2>
+              <div className="flex items-center text-sm">
+                {wsConnected ? (
+                  <span className="flex items-center text-green-600" title="Connected via WebSocket for real-time updates">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                    Real-time
+                  </span>
+                ) : (
+                  <span className="flex items-center text-blue-500" title="Using polling for updates (WebSocket unavailable)">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full mr-2"></div>
+                    Auto-refresh
+                  </span>
+                )}
+              </div>
+            </div>
             <div className="mb-4">
               <div className="flex justify-between text-sm text-gray-600 mb-1">
                 <span>Status: {task.status}</span>
