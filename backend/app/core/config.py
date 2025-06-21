@@ -142,11 +142,21 @@ class Settings:
 
         # CORS Settings
         # Production defaults to secure origins, can be overridden by env var
-        default_origins = ["*"] if self.ENVIRONMENT == Environment.DEVELOPMENT else [
-            "https://*.zeabur.app",  # Zeabur deployment domains
-            "https://localhost:3000",
-            "http://localhost:3000"
-        ]
+        if self.ENVIRONMENT == Environment.DEVELOPMENT:
+            default_origins = ["*"]
+        else:
+            # Production: specific domains only (wildcard patterns not supported in FastAPI CORS)
+            default_origins = [
+                "https://localhost:3000",
+                "http://localhost:3000"
+            ]
+            # Add Zeabur frontend domain if available
+            frontend_domain = os.getenv("FRONTEND_DOMAIN")
+            if frontend_domain:
+                if not frontend_domain.startswith("http"):
+                    frontend_domain = f"https://{frontend_domain}"
+                default_origins.append(frontend_domain)
+        
         self.ALLOWED_ORIGINS = parse_list_from_env("ALLOWED_ORIGINS", default_origins)
 
         # Langfuse Configuration

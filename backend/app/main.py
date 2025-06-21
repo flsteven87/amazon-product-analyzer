@@ -33,6 +33,8 @@ async def lifespan(app: FastAPI):
         project_name=settings.PROJECT_NAME,
         version=settings.VERSION,
         api_prefix=settings.API_V1_STR,
+        environment=settings.ENVIRONMENT.value,
+        allowed_origins=settings.ALLOWED_ORIGINS,
     )
     yield
     logger.info("application_shutdown")
@@ -71,6 +73,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 # Set up CORS middleware
+logger.info(
+    "configuring_cors",
+    allowed_origins=settings.ALLOWED_ORIGINS,
+    environment=settings.ENVIRONMENT.value,
+    credentials_allowed=True
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
