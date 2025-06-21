@@ -1,0 +1,29 @@
+# Simple docker-compose for Zeabur deployment testing
+# This version removes monitoring components for simpler deployment
+
+version: '3.8'
+
+services:
+  # Main API service only
+  app:
+    build:
+      context: .
+      args:
+        APP_ENV: ${APP_ENV:-production}
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.${APP_ENV:-production}
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - POSTGRES_URL=${POSTGRES_URL}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-supersecretkeythatshouldbechangedforproduction}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: on-failure

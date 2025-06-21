@@ -141,7 +141,13 @@ class Settings:
         self.DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "t", "yes")
 
         # CORS Settings
-        self.ALLOWED_ORIGINS = parse_list_from_env("ALLOWED_ORIGINS", ["*"])
+        # Production defaults to secure origins, can be overridden by env var
+        default_origins = ["*"] if self.ENVIRONMENT == Environment.DEVELOPMENT else [
+            "https://*.zeabur.app",  # Zeabur deployment domains
+            "https://localhost:3000",
+            "http://localhost:3000"
+        ]
+        self.ALLOWED_ORIGINS = parse_list_from_env("ALLOWED_ORIGINS", default_origins)
 
         # Langfuse Configuration
         self.LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")

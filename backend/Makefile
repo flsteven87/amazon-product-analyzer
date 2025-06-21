@@ -35,23 +35,10 @@ health:
 	@echo "Checking API health"
 	@curl -s http://localhost:8000/health | uv run python -m json.tool || echo "❌ API not responding"
 
-# Streamlit commands
-streamlit:
-	@echo "Starting Streamlit testing interface"
-	@bash -c "source scripts/set_env.sh development && uv run streamlit run streamlit_app.py --server.port 8501"
-
-streamlit-dev:
-	@echo "Starting Streamlit in development mode"
-	@bash -c "source scripts/set_env.sh development && uv run streamlit run streamlit_app.py --server.port 8501 --server.runOnSave true"
-
-# Full stack commands
-full-stack:
-	@echo "Starting full stack (API + Streamlit)"
-	@echo "Starting API in background..."
-	@bash -c "source scripts/set_env.sh development && uv run uvicorn app.main:app --reload --port 8000" &
-	@sleep 3
-	@echo "Starting Streamlit..."
-	@bash -c "source scripts/set_env.sh development && uv run streamlit run streamlit_app.py --server.port 8501"
+# Development commands
+api-dev:
+	@echo "Starting API in development mode"
+	@bash -c "source scripts/set_env.sh development && uv run uvicorn app.main:app --reload --port 8000"
 
 # Database commands
 db-stats:
@@ -180,9 +167,7 @@ help:
 	@echo "  dev: Run server in development environment"
 	@echo "  test-core: Test core multi-agent system imports"
 	@echo "  health: Check API health status"
-	@echo "  streamlit: Start Streamlit testing interface"
-	@echo "  streamlit-dev: Start Streamlit in development mode"
-	@echo "  full-stack: Start both API and Streamlit"
+	@echo "  api-dev: Start API in development mode"
 	@echo "  db-stats: Show database statistics"
 	@echo "  db-truncate: Truncate all database tables (DANGEROUS!)"
 	@echo "  db-delete-asin ASIN=<asin>: Delete all data for specific ASIN"

@@ -47,6 +47,9 @@ class SimpleWebSocketManager:
             self.task_subscribers[task_id] = set()
         self.task_subscribers[task_id].add(connection_id)
         logger.info(f"Connection {connection_id} subscribed to task {task_id}")
+        
+        # Send current task status immediately upon subscription
+        asyncio.create_task(self._send_current_task_status(connection_id, task_id))
 
     def unsubscribe_from_task(self, connection_id: str, task_id: str):
         """Unsubscribe a connection from task updates."""
@@ -156,6 +159,26 @@ class SimpleWebSocketManager:
         
         await self.broadcast_to_task(complete_data, task_id)
         logger.info(f"Emitted analysis complete for task {task_id}")
+
+    async def _send_current_task_status(self, connection_id: str, task_id: str):
+        """Send current task status to a newly subscribed connection."""
+        try:
+            # Import here to avoid circular imports
+            from app.services.analysis_service import AnalysisService
+            
+            # Get current task status
+            task_status = await AnalysisService.get_analysis_task(task_id)
+            if task_status:
+                status_message = {
+                    'type': 'progress_update',
+                    'task_id': task_id,
+                    'progress': task_status.progress,
+                    'status': task_status.status
+                }
+                await self.send_personal_message(status_message, connection_id)
+                logger.info(f"📤 Sent current status to new subscriber {connection_id}: {task_status.progress}%")
+        except Exception as e:
+            logger.error(f"Failed to send current task status to {connection_id}: {e}")
 
     def get_stats(self):
         """Get WebSocket connection statistics."""
