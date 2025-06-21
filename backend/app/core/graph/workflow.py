@@ -290,6 +290,14 @@ class ProductAnalysisWorkflow:
 
                 update_data = AnalysisTaskUpdate(status=AnalysisStatus.COMPLETED, progress=100)
                 await analysis_service.update_analysis_task(task_id, update_data)
+                
+                # Emit WebSocket completion update
+                await self._emit_progress_update(
+                    task_id=task_id,
+                    progress=100,
+                    status="completed",
+                    message="Analysis completed successfully"
+                )
 
                 # Save the final report
                 await analysis_service.save_analysis_report(
@@ -301,6 +309,21 @@ class ProductAnalysisWorkflow:
                 )
 
                 logger.info(f"Saved final report to database for task {task_id}")
+                
+                # Emit analysis complete event via WebSocket
+                try:
+                    if WEBSOCKET_AVAILABLE and simple_ws_manager:
+                        await simple_ws_manager.emit_analysis_complete(
+                            task_id=str(task_id),
+                            report_data={
+                                "content": final_report,
+                                "status": "completed",
+                                "task_id": str(task_id)
+                            }
+                        )
+                        logger.info(f"Emitted analysis complete event for task {task_id}")
+                except Exception as ws_error:
+                    logger.warning(f"Failed to emit analysis complete event: {str(ws_error)}")
                 
                 # Close any remaining RUNNING agent executions
                 await self._close_running_agent_executions(task_id)

@@ -14,6 +14,28 @@ export default function AnalysisPage() {
   const router = useRouter();
   const taskId = params.taskId as string;
 
+  // Helper function to get user-friendly agent status message
+  const getAgentStatusMessage = (agentName: string | null, progress: number, status: string): string => {
+    // Always show completion message for 100% progress or completed status
+    if (progress === 100 || status === 'completed') {
+      return 'Analysis completed!';
+    }
+    
+    if (!agentName) {
+      if (progress === 0) return 'Initializing analysis...';
+      return 'Analysis in progress...';
+    }
+
+    const agentMessages: Record<string, string> = {
+      'SupervisorAgent': 'Coordinating analysis workflow...',
+      'DataCollectorAgent': 'Collecting product data from Amazon...',
+      'MarketAnalyzerAgent': 'Analyzing market trends and competition...',
+      'OptimizationAdvisorAgent': 'Generating optimization recommendations...'
+    };
+
+    return agentMessages[agentName] || `Processing with ${agentName}...`;
+  };
+
   const [task, setTask] = useState<AnalysisTask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<AnalysisReport | null>(null);
@@ -21,6 +43,7 @@ export default function AnalysisPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [useWebSocket, setUseWebSocket] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
+  const [currentAgent, setCurrentAgent] = useState<string | null>(null);
 
   // Fetch task status and report
   const fetchTaskData = async () => {
@@ -70,12 +93,21 @@ export default function AnalysisPage() {
       
       // Set up WebSocket event handlers
       wsService.onProgressUpdate((update) => {
-        console.log('WebSocket progress update:', update);
+        console.log('WebSocket progress update received:', update);
+        console.log('Agent name from update:', update.agent_name);
         setTask(prev => prev ? {
           ...prev,
           progress: update.progress,
           status: update.status as 'pending' | 'processing' | 'completed' | 'failed'
         } : null);
+        
+        // Update current agent if provided
+        if (update.agent_name) {
+          console.log('Setting current agent to:', update.agent_name);
+          setCurrentAgent(update.agent_name);
+        } else {
+          console.log('No agent_name in update, keeping current:', currentAgent);
+        }
       });
       
       wsService.onAnalysisComplete((data) => {
@@ -215,9 +247,7 @@ export default function AnalysisPage() {
               </div>
             </div>
             <p className="text-sm text-gray-600">
-              {task.status === 'completed' ? 'Analysis completed!' : 
-               task.status === 'processing' ? 'Analysis in progress...' :
-               task.status === 'pending' ? 'Analysis queued...' : 'Analysis status unknown'}
+              {getAgentStatusMessage(currentAgent, task.progress, task.status)}
             </p>
           </div>
 

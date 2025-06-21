@@ -190,6 +190,9 @@ class BaseAgent:
         if state.get("task_id"):
             # Use sync update method to ensure progress is saved
             self._update_task_progress_sync(state["task_id"], progress)
+            
+            # Also emit WebSocket progress update
+            self._emit_websocket_progress_update_sync(state["task_id"], progress)
 
     async def _update_task_progress(self, task_id: UUID, progress: int):
         """Update task progress in database.
@@ -233,6 +236,63 @@ class BaseAgent:
 
         except Exception as e:
             self.logger.error(f"Failed to update task progress synchronously: {str(e)}", task_id=str(task_id), progress=progress)
+
+    def _emit_websocket_progress_update_sync(self, task_id: UUID, progress: int):
+        """Emit WebSocket progress update synchronously.
+
+        Args:
+            task_id: Analysis task ID
+            progress: Progress percentage (0-100)
+        """
+        try:
+            import asyncio
+            
+            # Try to get current loop
+            try:
+                asyncio.get_running_loop()
+                # If we have a running loop, create a task
+                asyncio.create_task(self._emit_websocket_progress_update_async(task_id, progress))
+            except RuntimeError:
+                # No running loop - run in new loop
+                asyncio.run(self._emit_websocket_progress_update_async(task_id, progress))
+                
+            self.logger.debug(f"Triggered WebSocket progress update to {progress}%", task_id=str(task_id), progress=progress)
+
+        except Exception as e:
+            self.logger.error(f"Failed to emit WebSocket progress update synchronously: {str(e)}", task_id=str(task_id), progress=progress)
+
+    async def _emit_websocket_progress_update_async(self, task_id: UUID, progress: int):
+        """Emit WebSocket progress update directly.
+
+        Args:
+            task_id: Analysis task ID
+            progress: Progress percentage (0-100)
+        """
+        try:
+            # Import WebSocket manager directly
+            from app.core.websocket_simple import simple_ws_manager
+            
+            # Determine status based on progress
+            if progress == 100:
+                status = "completed"
+            elif progress > 0:
+                status = "processing"
+            else:
+                status = "pending"
+            
+            # Emit progress update directly via WebSocket
+            await simple_ws_manager.emit_progress_update(
+                task_id=str(task_id),
+                progress=progress,
+                status=status,
+                agent_name=self.agent_name,
+                message=f"{self.agent_name} progress: {progress}%"
+            )
+            
+            self.logger.info(f"WebSocket progress update emitted: {progress}% for task {task_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to emit WebSocket progress update: {str(e)}", task_id=str(task_id), progress=progress)
 
     def _save_agent_execution_sync(self, context: AgentExecutionContext, status: AgentStatus):
         """Save agent execution data to database synchronously.
