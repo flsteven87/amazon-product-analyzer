@@ -42,12 +42,15 @@ USER appuser
 # Create log directory
 RUN mkdir -p /app/logs
 
-# Default port
+# Default port (dynamic based on PORT env var)
 EXPOSE 8000
 
 # Log the environment we're using
 RUN echo "Using ${APP_ENV} environment"
 
+# Remove problematic healthcheck temporarily
+# HEALTHCHECK will be handled by Zeabur
+
 # Command to run the application
 ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["sh", "-c", "/app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"] 

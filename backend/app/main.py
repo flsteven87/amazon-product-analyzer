@@ -132,3 +132,27 @@ async def health_check() -> Dict[str, Any]:
     status_code = status.HTTP_200_OK if db_healthy else status.HTTP_503_SERVICE_UNAVAILABLE
 
     return JSONResponse(content=response, status_code=status_code)
+
+
+@app.get("/cors-test")
+async def cors_test():
+    """Simple endpoint to test CORS configuration."""
+    logger.info("cors_test_called")
+    return {
+        "message": "CORS test successful",
+        "allowed_origins": settings.ALLOWED_ORIGINS,
+        "environment": settings.ENVIRONMENT.value,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.post("/cors-test")
+async def cors_test_post():
+    """Simple POST endpoint to test CORS preflight requests."""
+    logger.info("cors_test_post_called")
+    return {
+        "message": "CORS POST test successful",
+        "allowed_origins": settings.ALLOWED_ORIGINS,
+        "environment": settings.ENVIRONMENT.value,
+        "timestamp": datetime.now().isoformat(),
+    }
