@@ -158,35 +158,13 @@ Professional Notion-style analysis includes:
 - [**Agent Deep Dive**](./DATA_COLLECTOR_DEEP_DIVE.md) - Detailed look at the Data Collector Agent
 - [**API Documentation**](./API_DOCUMENTATION.md) - Complete API reference
 
-## 🤔 Key Design Decisions
-
-### Why LangGraph?
-- Built-in state management for complex workflows
-- Native support for conditional routing
-- Excellent error recovery mechanisms
-- Strong typing and observability
-
-### Why Hierarchical Agents?
-- Clear separation of concerns
-- Independent scaling potential
-- Easier debugging and maintenance
-- Natural problem decomposition
-
-### Why Native WebSocket?
-- Better FastAPI integration
-- Lower overhead than Socket.IO
-- Modern browser support
-- Cleaner implementation
-
-[→ Read more about our technical decisions](./ARCHITECTURE.md#technical-decisions--trade-offs)
 
 ## 🧪 Testing the System
 
 ### Sample Product URLs
 ```
-https://www.amazon.com/dp/B08N5WRWNW  # Echo Dot
-https://www.amazon.com/dp/B0CX48B5N7  # Running Shoes
-https://www.amazon.com/dp/B07ZPKN6YR  # Ring Video Doorbell
+https://www.amazon.com/dp/B0CW6BLQKL
+https://www.amazon.com/dp/B0014BYHJE
 ```
 
 ### Expected Flow
@@ -241,16 +219,6 @@ amazon-product-analyzer/
 - Review sentiment analysis
 - Export to multiple formats
 
-## 🤝 About This Project
-
-Built in 3 days as a demonstration of:
-- Rapid development with modern tools
-- Architectural thinking and design
-- Production-ready engineering practices
-- Effective use of AI in development
-
-This project showcases how modern AI tools like Claude Code can accelerate development while maintaining high engineering standards.
-
 ## 🔑 API Key Configuration
 
 Add your OpenAI API key to the `.env` file:
@@ -285,7 +253,5 @@ cd backend && uv run pytest
 This project is licensed under the MIT License.
 
 ---
-
-**Built with ❤️ using Claude Code and modern AI development practices**
 
 *For questions or discussions about the architecture and implementation choices, please refer to the [detailed documentation](./ARCHITECTURE.md).*
